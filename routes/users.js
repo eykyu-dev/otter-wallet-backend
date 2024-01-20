@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
+require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
-
-const supabaseUrl = 'https://qwfjhjpqozyfenwiqhoe.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF3ZmpoanBxb3p5ZmVud2lxaG9lIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTcwNTcxMDkyNSwiZXhwIjoyMDIxMjg2OTI1fQ.3eLQnacCrc_G2VwaP2m96pHhjfe_OYLfzC9Yfoh4Uxc'
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const bcrypt = require('bcrypt');
