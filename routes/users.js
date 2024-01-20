@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const User = require('../models/user_model');
+const { createClient } = require('@supabase/supabase-js');
+
+const supabaseUrl = 'https://qwfjhjpqozyfenwiqhoe.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF3ZmpoanBxb3p5ZmVud2lxaG9lIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTcwNTcxMDkyNSwiZXhwIjoyMDIxMjg2OTI1fQ.3eLQnacCrc_G2VwaP2m96pHhjfe_OYLfzC9Yfoh4Uxc'
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 const bcrypt = require('bcrypt');
 
@@ -9,9 +13,9 @@ const { check, validationResult } = require('express-validator');
 
 router.get('/', async (req, res) => {
   try {
-    let allUsers = await User.find({});
+    let allUsers = await supabase.from('users').select('*')
 
-    if (allUsers.length > 0) {
+    if (allUsers && allUsers.length > 0) {
       return res.status(200).json({ users: allUsers }); // Sending fetched users in the response
     } else {
       return res.status(404).json({ message: 'No users found' }); // If no users are found
@@ -23,29 +27,18 @@ router.get('/', async (req, res) => {
 });
 
 //Get function to pull a entry from the db based on ID
-router.get('/:id', 
-[
-  check('id').isMongoId(), // Validate that the ID is a valid MongoDB ObjectId
-], 
+router.get('/:id', async (req, res) => {
 
-async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    console.log('Error in validating:', errors.array());
-    return res.status(400).json({ errors: errors.array() });
-  }
-
-  const { id } = req.params; // Access the ID from req.params, not req.body
+  const { id } = req.params; // Access the ID
 
   try {
-    let foundUser = await User.findById(id);
+    let foundUser = await supabase.from('users').select('*').eq('email', email).single();
 
     if (foundUser) {
       return res.status(200).json({
         user: foundUser
       });
     }
-
     // If user not found, return a 404 status
     return res.status(404).json({ message: 'User not found' });
   } catch (err) {
@@ -54,44 +47,92 @@ async (req, res) => {
   }
 });
 
-//Register function to sign-up new users
+// Register function to sign-up new users
 router.post('/register', [
   check('username').isLength({ min: 3 }), // Validate username length
   check('email').isEmail(), // Validate email format
-  check('password').isLength({ min: 6 })], // Validate password length
-async(req, res) => {
-  //Checks for input
+  check('password').isLength({ min: 6 })
+], // Validate password length
+async (req, res) => {
+  try {
+    // Checks for input
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       console.log('Error in validating.', errors.array())
       return res.status(400).json({ errors: errors.array() });
     }
-    
-    //Pulls data from res.body after validating input
+
+    // Pulls data from res.body after validating input
     const { username, email, password } = req.body;
 
-    try{
-      //Tries to find existing user, if not create one and return a 201
-        let findExisting = await User.findOne({email});
-        if (findExisting){
-            return res.status(400).json({message: 'User already exists.'});
-        }
-        
-        // 3 is how encrypted the password should be. 
-        const hashedPassword = await bcrypt.hash(password, 3);
+    // Tries to find existing user, if not create one and return a 201
+    let foundUser = await supabase.from('users').select('*').eq('email', email).single();
 
-        const newUser = new User({username, email, hashedPassword});
-        await newUser.save();
+    if (foundUser && foundUser.data) {
+      return res.status(400).json({ message: 'User found, cannot register.' });
+    }else{
+      // No user found, proceed with registration
+      const hashedPassword = await bcrypt.hash(password, 3);
 
-        return res.status(201).json({message: 'User was created.'})
+      const { data: newUser, error: registrationError } = await supabase
+        .from('users')
+        .upsert([{ username, email, hashedPassword }], { onConflict: ['email'] });
+
+      if (registrationError) {
+        console.error('Error registering user:', registrationError);
+        return res.status(500).json({ message: 'Error registering user', error: registrationError });
+      }
+      
+      return res.status(201).json({ message: 'User was created.' });
     }
-
-    catch (err){
-        console.log('Error registering user.', err)
-        return res.status(500).json({ message: 'Server error' });
-    }
+  } catch (err) {
+    console.log('Error registering user.', err)
+    return res.status(500).json({ message: 'Server error', error: err.message });
+  }
 });
 
+
+router.delete('/delete', async (req, res) => {
+  const { id } = req.query;
+
+  try {
+    // Query to check if the user exists given by ID.
+    const { data: userByID, queryByIDError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (queryByIDError) 
+    {
+      console.error('Error could not find user by ID:', queryByIDError);
+      return res.status(500).json({ message: 'Error could not find user by ID', error: queryByIDError });
+    }
+
+    // If the user does not exist, return a 404 status
+    if (!userByID) 
+    {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Query to delete the entry given ID.
+    const { error: deletionError } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', id);
+
+    if (deletionError) 
+    {
+      console.error('Could not delete.', deletionError);
+      return res.status(500).json({ message: 'Could not delete', error: deletionError });
+    }
+
+    return res.status(200).json({ message: 'User was deleted.' });
+  } catch (err) {
+    console.log('Error deleting user.', err);
+    return res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
 
 
 
