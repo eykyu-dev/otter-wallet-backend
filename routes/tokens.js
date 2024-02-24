@@ -24,7 +24,7 @@ router.post("/generate_link_token", verifyToken, async (req, res, next) => {
     const userObject = { client_user_id: uuid };
     const tokenResponse = await plaidClient.linkTokenCreate({
       user: userObject,
-      products: ["identity"],
+      products: ["transactions"],
       client_name: "otter-wallet",
       language: "en",
       country_codes: ["US"],
@@ -38,7 +38,7 @@ router.post("/generate_link_token", verifyToken, async (req, res, next) => {
 });
 
 /**
- * Middleware to verify JWT, adds uuid to the req
+ * Middleware to verify JWT, adds uuid to the req   
  */
 const verifyToken = (req, res, next) => {
     const authHeader = req.headers.authorization
@@ -58,15 +58,13 @@ const verifyToken = (req, res, next) => {
 };
 
 
-
-
 /**
  * Exchanges a public token for an access token. Then, fetches a bunch of
  * information about that item and stores it in our database
  */
-router.post("/exchange_public_token", async (req, res, next) => {
+router.post("/exchange_public_token", verifyToken, async (req, res, next) => {
   try {
-    const userId = getLoggedInUserId(req);
+    const uuid = req.uuid;
     const publicToken = escape(req.body.publicToken);
 
     const tokenResponse = await plaidClient.itemPublicTokenExchange({
