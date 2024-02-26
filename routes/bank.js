@@ -1,43 +1,39 @@
 const express = require("express");
 const db = require("../db");
-const { getLoggedInUserId } = require("../utils");
 const { plaidClient } = require("../plaid");
 
-const { createClient } = require('@supabase/supabase-js');
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
-
 const router = express.Router();
+const verifyTokenAndExtractUserId = require("./middleware/verifyTokenAndExtractUserId");
 
+require('dotenv').config();
 
-//recieve list of all banks the user is connected too. 
+router.use(verifyTokenAndExtractUserId)
+
+// Recieve list of all banks the user is connected too. 
 router.get("/list", async (req, res, next) => {
   try {
-    const userId = getLoggedInUserId(req);
-    const result = await db.getBankNamesForUser(userId);
+    const result = await db.getBankNamesForUser(req.user_id);
     res.json(result);
   } catch (error) {
     next(error);
   }
 });
 
-
-//removing a bank that a user is connected too.
+// Removing a bank that a user is connected to.
 router.post("/deactivate", async (req, res, next) => {
   try {
-    const itemId = req.body.itemId;
-    const userId = getLoggedInUserId(req);
+    const item_id = req.body.item_id;
+    const user_id = getLoggedInUserId(req);
     const { access_token: accessToken } = await db.getItemInfoForUser(
-      itemId,
-      userId
+      item_id,
+      user_id
     );
     await plaidClient.itemRemove({
       access_token: accessToken,
     });
-    await db.deactivateItem(itemId);
+    await db.deactivateItem(item_id);
 
-    res.json({ removed: itemId });
+    res.json({ removed: item_id });
   } catch (error) {
     next(error);
   }
