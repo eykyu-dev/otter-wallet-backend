@@ -22,6 +22,11 @@ router.post("/sync", async (req, res, next) => {
   }
 });
 
+
+const fetchNewSyncData = async function(accessToken){
+    let keepGoing = false;
+    
+}
 /**
  * Given an item ID, this will fetch all transactions for all accounts
  * associated with this item using the sync API. We can call this manually

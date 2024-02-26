@@ -70,8 +70,9 @@ router.post("/exchange_public_token", verifyToken, async (req, res, next) => {
     const tokenResponse = await plaidClient.itemPublicTokenExchange({
       public_token: publicToken,
     });
+
     const tokenData = tokenResponse.data;
-    await db.addItem(tokenData.item_id, userId, tokenData.access_token);
+    await addItem(tokenData.item_id, uuid, tokenData.access_token);
     await populateBankName(tokenData.item_id, tokenData.access_token);
     await populateAccountNames(tokenData.access_token);
 
@@ -89,10 +90,11 @@ router.post("/exchange_public_token", verifyToken, async (req, res, next) => {
   }
 });
 
-const populateBankName = async (itemId, accessToken) => {
+
+const populateBankName = async (item_id, access_token) => {
   try {
     const itemResponse = await plaidClient.itemGet({
-      access_token: accessToken,
+      access_token: access_token,
     });
     const institutionId = itemResponse.data.item.institution_id;
     if (institutionId == null) {
