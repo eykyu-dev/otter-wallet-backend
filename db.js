@@ -4,6 +4,49 @@ const supabaseKey = process.env.SUPABASE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 require('dotenv').config();
 
+
+const getItemIdsForUser = async function(user_id){
+    try {
+        const { data } = await supabase
+            .from('items')
+            .select('id') 
+            .eq('uuid', user_id)
+            .select() 
+        return data;
+    } catch (error) {
+        console.error({ 
+            message: error.message, 
+            location: "itemExists", 
+            query: 'SELECT id FROM items WHERE id = ' + item_id 
+        });
+        return null;
+    }
+}
+/**
+ * Checks whether an item with the provided item ID exists in the database.
+ *
+ * @param {string} item_id - The ID of the item to check for existence.
+ * @returns {boolean} True if the item exists, false otherwise or if an error occurs.
+ */
+
+const itemExists = async function (item_id){
+    try {
+        const { data } = await supabase
+            .from('items')
+            .select('id') 
+            .eq('id', item_id)
+            .single(); 
+        return data !== null; // Return true if data is not null, indicating item exists
+    } catch (error) {
+        console.error({ 
+            message: error.message, 
+            location: "itemExists", 
+            query: 'SELECT id FROM items WHERE id = ' + item_id 
+        });
+        return false;
+    }
+}
+
 /**
  * Retrieves bank names associated with a user from the database.
  *
@@ -87,14 +130,24 @@ const getaccount_idsForItem = async function (item_id) {
     return data;
 };
 
-// const deactivateItem = async function (item_id) 
-// {
-//   // If your user wanted all the data associated with this bank removed, you
-//   // could...
-//   // - Delete transactions for accounts belonging to this item
-//   // - Delete accounts that belong to this item
-//   // - Delete the item itself from the database
-// };
+
+const deactivateItem = async function (item_id) 
+{
+    let {error} = await supabase
+    .from('items')
+    .delete()
+    .eq('id', item_id)
+
+    if (error) {
+        console.error({ message: error.message, location: "deactivateItem", query: 'SELECT id FROM accounts WHERE item_id = ' + item_id });
+        return null;
+    }
+  // If your user wanted all the data associated with this bank removed, you
+  // could...
+  // - Delete transactions for accounts belonging to this item
+  // - Delete accounts that belong to this item
+  // - Delete the item itself from the database
+};
 
 
 /**
@@ -162,7 +215,7 @@ const getItemInfoForUser = async function (item_id, user_id) {
     let { data, error } = await supabase
         .from('items')
         .select()
-        .eq('item_id', item_id)
+        .eq('id', item_id)
         .eq('uuid', user_id);
 
     if (error) {
@@ -173,7 +226,6 @@ const getItemInfoForUser = async function (item_id, user_id) {
     return data;
 };
 
-
 /**
  * Add a new transaction to our database
  *
@@ -181,7 +233,17 @@ const getItemInfoForUser = async function (item_id, user_id) {
  */
 const addNewTransaction = async function (transactionObj) 
 {
+    let {data, error} = await supabase
+    .from('transactions')
+    .upsert({id: transactionObj.id, uuid: transactionObj.user_id, date: transactionObj.date, category: transactionObj.category, account_id: transactionObj.account_id, amount: transactionObj.amount, currency_code: transactionObj.currency_code})
+    .select()
 
+    if (error) {
+        console.error({ message: error.message, location: "addNewTransaction"});
+        throw new Error(error.message);
+    }
+
+    return data;
 };
 
 /**
@@ -191,7 +253,18 @@ const addNewTransaction = async function (transactionObj)
  */
 const modifyExistingTransaction = async function (transactionObj) 
 {
+    let {data, error} = await supabase
+    .from('transactions')
+    .update({id: transactionObj.id, uuid: transactionObj.user_id, date: transactionObj.date, category: transactionObj.category, account_id: transactionObj.account_id, amount: transactionObj.amount, currency_code: transactionObj.currency_code})
+    .eq('id', transactionObj.id)
+    .single()
 
+    if (error) {
+        console.error({ message: error.message, location: "modifyExistingTransaction"});
+        throw new Error(error.message);
+    }
+
+    return data;
 };
 
 /**
@@ -201,7 +274,18 @@ const modifyExistingTransaction = async function (transactionObj)
  */
 const markTransactionAsRemoved = async function (transactionId) 
 {
+    let {data, error} = await supabase
+    .from('transactions')
+    .update('is_removed', true)
+    .eq('id', transactionId)
+    .single()
 
+    if (error) {
+        console.error({ message: error.message, location: "markTransactionAsRemoved"});
+        throw new Error(error.message);
+    }
+
+    return data;
 };
 
 /**
@@ -211,7 +295,18 @@ const markTransactionAsRemoved = async function (transactionId)
  */
 const deleteExistingTransaction = async function (transactionId) 
 {
+    let {data, error} = await supabase
+    .from('transactions')
+    .delete()
+    .eq('id', transactionId)
+    .single()
 
+    if (error) {
+        console.error({ message: error.message, location: "markTransactionAsRemoved"});
+        throw new Error(error.message);
+    }
+
+    return data;
 };
 
 /**
@@ -220,10 +315,32 @@ const deleteExistingTransaction = async function (transactionId)
  * @param {string} user_id
  * @param {number} maxNum
  */
-const getTransactionsForUser = async function (user_id, maxNum) 
-{
 
-};
+async function fetchTransactions(user_id) {
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select(`
+          transactions.*,
+          accounts.name as account_name,
+          items.bank_name as bank_name
+        `)
+        .join('accounts', { 'transactions.account_id': 'accounts.id' })
+        .join('items', { 'accounts.item_id': 'items.id' })
+        .eq('transactions.user_id', user_id)
+        .eq('is_removed', 0)
+        .order('date', { ascending: false });
+  
+      if (error) {
+        throw error;
+      }
+  
+      return data;
+    } catch (error) {
+      console.error('Error fetching transactions:', error.message);
+      throw error;
+    }
+  }
 
 /**
  * Save our cursor to the database
@@ -233,26 +350,38 @@ const getTransactionsForUser = async function (user_id, maxNum)
  */
 const saveCursorForItem = async function (transactionCursor, item_id) 
 {
+    let {data, error} = await supabase
+    .from('items')
+    .update('transaction_cursor', transactionCursor)
+    .eq('id', item_id)
+    .single()
 
+    if (error) {
+        console.error({ message: error.message, location: "markTransactionAsRemoved"});
+        throw new Error(error.message);
+    }
+
+    return data;
 };
 
 
 module.exports = {
-    // getItemIdsForUser,
+    itemExists,
+    getItemIdsForUser,
     getItemsAndAccessTokensForUser,
     // getAccountIdsForItem,
     // confirmItemBelongsToUser,
-    // deactivateItem,
+    deactivateItem,
     getBankNamesForUser,
     addItem,
     addBankNameForItem,
     addAccount,
     // getItemInfo,
     getItemInfoForUser,
-    // addNewTransaction,
-    // modifyExistingTransaction,
-    // deleteExistingTransaction,
-    // markTransactionAsRemoved,
-    // getTransactionsForUser,
-    // saveCursorForItem,
+    addNewTransaction,
+    modifyExistingTransaction,
+    deleteExistingTransaction,
+    markTransactionAsRemoved,
+    fetchTransactions,
+    saveCursorForItem,
   };
